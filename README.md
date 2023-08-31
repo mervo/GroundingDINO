@@ -171,6 +171,7 @@ cd GroundingDINO/
 3. Install the required dependencies in the current directory.
 
 ```bash
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu121
 pip install -e .
 ```
 
@@ -204,7 +205,7 @@ If you would like to specify the phrases to detect, here is a demo:
 ```bash
 CUDA_VISIBLE_DEVICES={GPU ID} python demo/inference_on_a_image.py \
 -c groundingdino/config/GroundingDINO_SwinT_OGC.py \
--p ./groundingdino_swint_ogc.pth \
+-p weights/groundingdino_swint_ogc.pth \
 -i .asset/cat_dog.jpeg \
 -o logs/1111 \
 -t "There is a cat and a dog in the image ." \
