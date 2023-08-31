@@ -1,6 +1,19 @@
+'''
+CUDA_VISIBLE_DEVICES=0 python demo/inference_on_a_video.py \
+-c groundingdino/config/GroundingDINO_SwinT_OGC.py \
+-p weights/groundingdino_swint_ogc.pth \
+-i "/data/datasets/vision_60/video_2023-08-31_11-48-18.mp4" \
+-o logs/ \
+-t "vision 60" \
+--box_threshold 0.41 \
+--visualize True
+'''
 import argparse
+import itertools
 import os
 import sys
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -12,6 +25,24 @@ from groundingdino.util import box_ops
 from groundingdino.util.slconfig import SLConfig
 from groundingdino.util.utils import clean_state_dict, get_phrases_from_posmap
 from groundingdino.util.vl_utils import create_positive_map_from_span
+
+import time
+import cv2
+
+get_your_config_from_env_var = os.environ.get('CONFIG_NAME', 'default_value_if_not_set')
+
+# comma separated strings
+video_feed_names = os.environ.get('VIDEO_FEED_NAMES',
+                                  'VIDEO1')
+streams = os.environ.get('STREAMS', 'rtsp://wowzaec2demo.streamlock.net/vod/mp4:BigBuckBunny_115k.mp4')
+manual_video_fps = os.environ.get('MANUAL_VIDEO_FPS', '-1')  # -1 to try to read from video stream metadata
+source_types = os.environ.get('SOURCE_TYPES', 'rtsp')
+
+queue_size = int(os.environ.get('QUEUE_SIZE', 2))
+recording_dir = os.environ.get('RECORDING_DIR', None)
+reconnect_threshold_sec = int(os.environ.get('RECONNECT_THRESHOLD_SEC', 5))
+max_height = int(os.environ.get('MAX_HEIGHT', 1080))
+method = os.environ.get('METHOD', 'cv2')
 
 
 def plot_boxes_to_image(image_pil, tgt):
@@ -32,7 +63,8 @@ def plot_boxes_to_image(image_pil, tgt):
         box[:2] -= box[2:] / 2
         box[2:] += box[:2]
         # random color
-        color = tuple(np.random.randint(0, 255, size=3).tolist())
+        # color = tuple(np.random.randint(0, 255, size=3).tolist())
+        color = (255, 0, 0)
         # draw
         x0, y0, x1, y1 = box
         x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
@@ -55,10 +87,8 @@ def plot_boxes_to_image(image_pil, tgt):
     return image_pil, mask
 
 
-def load_image(image_path):
+def load_image(image_pil):
     # load image
-    image_pil = Image.open(image_path).convert("RGB")  # load image
-
     transform = T.Compose(
         [
             T.RandomResize([800], max_size=1333),
@@ -81,7 +111,8 @@ def load_model(model_config_path, model_checkpoint_path, cpu_only=False):
     return model
 
 
-def get_grounding_output(model, image, caption, box_threshold, text_threshold=None, with_logits=True, cpu_only=False, token_spans=None):
+def get_grounding_output(model, image, caption, box_threshold, text_threshold=None, with_logits=True, cpu_only=False,
+                         token_spans=None):
     assert text_threshold is not None or token_spans is not None, "text_threshould and token_spans should not be None at the same time!"
     caption = caption.lower()
     caption = caption.strip()
@@ -119,9 +150,9 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold=No
         positive_maps = create_positive_map_from_span(
             model.tokenizer(text_prompt),
             token_span=token_spans
-        ).to(image.device) # n_phrase, 256
+        ).to(image.device)  # n_phrase, 256
 
-        logits_for_phrases = positive_maps @ logits.T # n_phrase, nq
+        logits_for_phrases = positive_maps @ logits.T  # n_phrase, nq
         all_logits = []
         all_phrases = []
         all_boxes = []
@@ -142,31 +173,31 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold=No
         boxes_filt = torch.cat(all_boxes, dim=0).cpu()
         pred_phrases = all_phrases
 
-
     return boxes_filt, pred_phrases
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser("Grounding DINO example", add_help=True)
-    parser.add_argument("--config_file", "-c", type=str, required=True, help="path to config file")
+    parser.add_argument("--config_file", "-c", type=str, default="../groundingdino/config/GroundingDINO_SwinT_OGC.py",
+                        required=False, help="path to config file")
     parser.add_argument(
-        "--checkpoint_path", "-p", type=str, required=True, help="path to checkpoint file"
+        "--checkpoint_path", "-p", type=str, default="../weights/groundingdino_swint_ogc.pth", required=False,
+        help="path to checkpoint file"
     )
-    parser.add_argument("--image_path", "-i", type=str, required=True, help="path to image file")
-    parser.add_argument("--text_prompt", "-t", type=str, required=True, help="text prompt")
-    parser.add_argument(
-        "--output_dir", "-o", type=str, default="outputs", required=True, help="output directory"
-    )
+    parser.add_argument("--target_video", "-i", type=str, required=False, help="path to video file")
+    parser.add_argument("--text_prompt", "-t", type=str, default="vision 60", required=False, help="text prompt")
+    parser.add_argument('--inference_folder', "-o", type=Path, help='path to save inference results')
+    parser.add_argument('--visualize', type=bool, default=False, help='enable for visualization')
 
-    parser.add_argument("--box_threshold", type=float, default=0.3, help="box threshold")
+    parser.add_argument("--box_threshold", type=float, default=0.36, help="box threshold")
     parser.add_argument("--text_threshold", type=float, default=0.25, help="text threshold")
     parser.add_argument("--token_spans", type=str, default=None, help=
-                        "The positions of start and end positions of phrases of interest. \
-                        For example, a caption is 'a cat and a dog', \
-                        if you would like to detect 'cat', the token_spans should be '[[[2, 5]], ]', since 'a cat and a dog'[2:5] is 'cat'. \
-                        if you would like to detect 'a cat', the token_spans should be '[[[0, 1], [2, 5]], ]', since 'a cat and a dog'[0:1] is 'a', and 'a cat and a dog'[2:5] is 'cat'. \
-                        ")
+    "The positions of start and end positions of phrases of interest. \
+    For example, a caption is 'a cat and a dog', \
+    if you would like to detect 'cat', the token_spans should be '[[[2, 5]], ]', since 'a cat and a dog'[2:5] is 'cat'. \
+    if you would like to detect 'a cat', the token_spans should be '[[[0, 1], [2, 5]], ]', since 'a cat and a dog'[0:1] is 'a', and 'a cat and a dog'[2:5] is 'cat'. \
+    ")
 
     parser.add_argument("--cpu-only", action="store_true", help="running on cpu only!, default=False")
     args = parser.parse_args()
@@ -174,41 +205,85 @@ if __name__ == "__main__":
     # cfg
     config_file = args.config_file  # change the path of the model config file
     checkpoint_path = args.checkpoint_path  # change the path of the model
-    image_path = args.image_path
+    video_path = args.target_video
     text_prompt = args.text_prompt
-    output_dir = args.output_dir
+    output_dir = args.inference_folder
     box_threshold = args.box_threshold
     text_threshold = args.text_threshold
     token_spans = args.token_spans
 
-    # make dir
-    os.makedirs(output_dir, exist_ok=True)
-    # load image
-    image_pil, image = load_image(image_path)
     # load model
     model = load_model(config_file, checkpoint_path, cpu_only=args.cpu_only)
-
-    # visualize raw image
-    image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
 
     # set the text_threshold to None if token_spans is set.
     if token_spans is not None:
         text_threshold = None
         print("Using token_spans. Set the text_threshold to None.")
 
+    if args.visualize:
+        cv2.namedWindow('OUTPUT', cv2.WINDOW_NORMAL)
 
-    # run model
-    boxes_filt, pred_phrases = get_grounding_output(
-        model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only, token_spans=eval(f"{token_spans}")
-    )
+    # process video frames
+    from video_utils.video_manager import VideoManager
 
-    # visualize pred
-    size = image_pil.size
-    pred_dict = {
-        "boxes": boxes_filt,
-        "size": [size[1], size[0]],  # H,W
-        "labels": pred_phrases,
-    }
-    # import ipdb; ipdb.set_trace()
-    image_with_box = plot_boxes_to_image(image_pil, pred_dict)[0]
-    image_with_box.save(os.path.join(output_dir, "pred.jpg"))
+    if args.target_video is not None:
+        streams = str(args.target_video)
+    print(f'Current Video: {streams}')
+
+    vidManager = VideoManager(video_feed_names=video_feed_names.split(','),
+                              streams=streams.split(','), source_types=source_types.split(','),
+                              manual_video_fps=manual_video_fps.split(','), queue_size=queue_size,
+                              recording_dir=recording_dir,
+                              reconnect_threshold_sec=reconnect_threshold_sec, max_height=max_height, method=method)
+    vidManager.start()
+    videos_information = vidManager.get_all_videos_information()
+    print(f'{videos_information}')
+
+    # make dir
+    if args.inference_folder is not None:
+        now = datetime.now()
+        day = now.strftime("%Y_%m_%d_%H-%M-%S-%f")
+        out_vid_fp = os.path.join(
+            output_dir, 'output_{}.avi'.format(day))
+        out = cv2.VideoWriter(out_vid_fp, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 5,
+                              (int(videos_information[0]['width']), int(videos_information[0]['height'])))
+        print((videos_information[0]['height']))
+
+    for frame_count in itertools.count():
+        frame_of_each_video_feed = vidManager.read()  # frames is list of arrays from 0 - 255, dtype uint8
+        for i, video_stream_information in enumerate(vidManager.videos):
+            if len(frame_of_each_video_feed[i]) != 0:
+                pil_img = Image.fromarray(cv2.cvtColor(frame_of_each_video_feed[i], cv2.COLOR_BGR2RGB))
+                # pil_img.show()
+                image_pil, image = load_image(pil_img)
+                # run model
+                boxes_filt, pred_phrases = get_grounding_output(
+                    model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only,
+                    token_spans=eval(f"{token_spans}")
+                )
+
+                # visualize pred
+                size = image_pil.size
+                pred_dict = {
+                    "boxes": boxes_filt,
+                    "size": [size[1], size[0]],  # H,W
+                    "labels": pred_phrases,
+                }
+                # import ipdb; ipdb.set_trace()
+                current_img = plot_boxes_to_image(image_pil, pred_dict)[0]
+                cv2_img = cv2.cvtColor(np.array(current_img), cv2.COLOR_BGR2RGB)
+
+                if args.visualize:
+                    cv2.imshow('OUTPUT', cv2_img)
+
+                if args.inference_folder is not None:
+                    out.write(cv2_img)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            cv2.destroyAllWindows()
+            if args.inference_folder is not None:
+                out.release()
+            break
+
+    vidManager.stop()
+    cv2.destroyAllWindows()
