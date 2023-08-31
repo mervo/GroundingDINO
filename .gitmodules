@@ -1,0 +1,3 @@
+[submodule "video_utils"]
+	path = video_utils
+	url = git@github.com:mervo/video_utils.git
