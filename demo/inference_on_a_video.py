@@ -188,9 +188,10 @@ if __name__ == "__main__":
     parser.add_argument("--target_video", "-i", type=str, required=False, help="path to video file")
     parser.add_argument("--text_prompt", "-t", type=str, default="vision 60", required=False, help="text prompt")
     parser.add_argument('--inference_folder', "-o", type=Path, help='path to save inference results')
+    parser.add_argument('--inference_fps', type=float, default=5.0, help='fps of inference')
     parser.add_argument('--visualize', type=bool, default=False, help='enable for visualization')
 
-    parser.add_argument("--box_threshold", type=float, default=0.36, help="box threshold")
+    parser.add_argument("--box_threshold", type=float, default=0.3, help="box threshold")
     parser.add_argument("--text_threshold", type=float, default=0.25, help="text threshold")
     parser.add_argument("--token_spans", type=str, default=None, help=
     "The positions of start and end positions of phrases of interest. \
@@ -211,6 +212,7 @@ if __name__ == "__main__":
     box_threshold = args.box_threshold
     text_threshold = args.text_threshold
     token_spans = args.token_spans
+    inference_fps = args.inference_fps
 
     # load model
     model = load_model(config_file, checkpoint_path, cpu_only=args.cpu_only)
@@ -245,7 +247,7 @@ if __name__ == "__main__":
         day = now.strftime("%Y_%m_%d_%H-%M-%S-%f")
         out_vid_fp = os.path.join(
             output_dir, 'output_{}.avi'.format(day))
-        out = cv2.VideoWriter(out_vid_fp, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), 5,
+        out = cv2.VideoWriter(out_vid_fp, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), inference_fps,
                               (int(videos_information[0]['width']), int(videos_information[0]['height'])))
         print((videos_information[0]['height']))
 
