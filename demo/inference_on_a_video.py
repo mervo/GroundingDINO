@@ -1,11 +1,12 @@
 '''
 CUDA_VISIBLE_DEVICES=0 python demo/inference_on_a_video.py \
--c groundingdino/config/GroundingDINO_SwinT_OGC.py \
--p weights/groundingdino_swint_ogc.pth \
--i "/data/datasets/vision_60/video_2023-08-31_11-48-18.mp4" \
+-c groundingdino/config/GroundingDINO_SwinB_cfg.py \
+-p weights/groundingdino_swinb_cogcoor.pth \
+-i "/data/datasets/vision_60/20230523_DIC-20230717T023351Z-001/20230523_DIC/MVI_2682.MP4" \
 -o logs/ \
--t "vision 60" \
---box_threshold 0.41 \
+-t "spot robot" \
+--box_threshold 0.35 \
+--inference_fps 10 \
 --visualize True
 '''
 import argparse
@@ -38,6 +39,8 @@ streams = os.environ.get('STREAMS', 'rtsp://wowzaec2demo.streamlock.net/vod/mp4:
 manual_video_fps = os.environ.get('MANUAL_VIDEO_FPS', '-1')  # -1 to try to read from video stream metadata
 source_types = os.environ.get('SOURCE_TYPES', 'rtsp')
 
+# TODO set queue size to 2 for live video streams to skip frames, None to process every frame in video
+# queue_size = None
 queue_size = int(os.environ.get('QUEUE_SIZE', 2))
 recording_dir = os.environ.get('RECORDING_DIR', None)
 reconnect_threshold_sec = int(os.environ.get('RECONNECT_THRESHOLD_SEC', 5))
@@ -142,7 +145,9 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold=No
         for logit, box in zip(logits_filt, boxes_filt):
             pred_phrase = get_phrases_from_posmap(logit > text_threshold, tokenized, tokenlizer)
             if with_logits:
-                pred_phrases.append(pred_phrase + f"({str(logit.max().item())[:4]})")
+                pred_phrases.append('target' + f"({str(logit.max().item())[:4]})")
+                # TODO change to show actual phrase used in label display
+                # pred_phrases.append(pred_phrase + f"({str(logit.max().item())[:4]})")
             else:
                 pred_phrases.append(pred_phrase)
     else:
@@ -251,6 +256,7 @@ if __name__ == "__main__":
                               (int(videos_information[0]['width']), int(videos_information[0]['height'])))
         print((videos_information[0]['height']))
 
+    start_time = time.time()
     for frame_count in itertools.count():
         frame_of_each_video_feed = vidManager.read()  # frames is list of arrays from 0 - 255, dtype uint8
         for i, video_stream_information in enumerate(vidManager.videos):
@@ -286,6 +292,8 @@ if __name__ == "__main__":
             if args.inference_folder is not None:
                 out.release()
             break
+
+    print("End to End FPS: ", 1.0 / (time.time() - start_time))  # FPS = 1 / time to process loop
 
     vidManager.stop()
     cv2.destroyAllWindows()

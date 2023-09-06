@@ -145,3 +145,4 @@ grounding/version.py
 vis/
 tmp/
 weights/
+demo/coco_dataset
