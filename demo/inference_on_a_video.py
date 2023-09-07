@@ -257,8 +257,10 @@ if __name__ == "__main__":
         print((videos_information[0]['height']))
 
     start_time = time.time()
+    total_frame_count = 0
     for frame_count in itertools.count():
         frame_of_each_video_feed = vidManager.read()  # frames is list of arrays from 0 - 255, dtype uint8
+        total_frame_count += 1
         for i, video_stream_information in enumerate(vidManager.videos):
             if len(frame_of_each_video_feed[i]) != 0:
                 pil_img = Image.fromarray(cv2.cvtColor(frame_of_each_video_feed[i], cv2.COLOR_BGR2RGB))
@@ -293,7 +295,8 @@ if __name__ == "__main__":
                 out.release()
             break
 
-    print("End to End FPS: ", 1.0 / (time.time() - start_time))  # FPS = 1 / time to process loop
+    time_taken_for_single_frame = (time.time() - start_time) / total_frame_count
+    print("End to End Average FPS: ", 1.0 / time_taken_for_single_frame)  # FPS = 1 / time to process 1 frame
 
     vidManager.stop()
     cv2.destroyAllWindows()
