@@ -1,6 +1,6 @@
 import argparse
 import os
-import sys
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -37,7 +37,7 @@ def plot_boxes_to_image(image_pil, tgt):
         x0, y0, x1, y1 = box
         x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
 
-        draw.rectangle([x0, y0, x1, y1], outline=color, width=6)
+        draw.rectangle([x0, y0, x1, y1], outline=color, width=3)
         # draw.text((x0, y0), str(label), fill=color)
 
         font = ImageFont.load_default()
@@ -47,6 +47,7 @@ def plot_boxes_to_image(image_pil, tgt):
             w, h = draw.textsize(str(label), font)
             bbox = (x0, y0, w + x0, y0 + h)
         # bbox = draw.textbbox((x0, y0), str(label))
+        # TODO comment out to disable text
         draw.rectangle(bbox, fill=color)
         draw.text((x0, y0), str(label), fill="white")
 
@@ -81,7 +82,8 @@ def load_model(model_config_path, model_checkpoint_path, cpu_only=False):
     return model
 
 
-def get_grounding_output(model, image, caption, box_threshold, text_threshold=None, with_logits=True, cpu_only=False, token_spans=None):
+def get_grounding_output(model, image, caption, box_threshold, text_threshold=None, with_logits=True, cpu_only=False,
+                         token_spans=None):
     assert text_threshold is not None or token_spans is not None, "text_threshould and token_spans should not be None at the same time!"
     caption = caption.lower()
     caption = caption.strip()
@@ -119,9 +121,9 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold=No
         positive_maps = create_positive_map_from_span(
             model.tokenizer(text_prompt),
             token_span=token_spans
-        ).to(image.device) # n_phrase, 256
+        ).to(image.device)  # n_phrase, 256
 
-        logits_for_phrases = positive_maps @ logits.T # n_phrase, nq
+        logits_for_phrases = positive_maps @ logits.T  # n_phrase, nq
         all_logits = []
         all_phrases = []
         all_boxes = []
@@ -142,7 +144,6 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold=No
         boxes_filt = torch.cat(all_boxes, dim=0).cpu()
         pred_phrases = all_phrases
 
-
     return boxes_filt, pred_phrases
 
 
@@ -162,11 +163,11 @@ if __name__ == "__main__":
     parser.add_argument("--box_threshold", type=float, default=0.3, help="box threshold")
     parser.add_argument("--text_threshold", type=float, default=0.25, help="text threshold")
     parser.add_argument("--token_spans", type=str, default=None, help=
-                        "The positions of start and end positions of phrases of interest. \
-                        For example, a caption is 'a cat and a dog', \
-                        if you would like to detect 'cat', the token_spans should be '[[[2, 5]], ]', since 'a cat and a dog'[2:5] is 'cat'. \
-                        if you would like to detect 'a cat', the token_spans should be '[[[0, 1], [2, 5]], ]', since 'a cat and a dog'[0:1] is 'a', and 'a cat and a dog'[2:5] is 'cat'. \
-                        ")
+    "The positions of start and end positions of phrases of interest. \
+    For example, a caption is 'a cat and a dog', \
+    if you would like to detect 'cat', the token_spans should be '[[[2, 5]], ]', since 'a cat and a dog'[2:5] is 'cat'. \
+    if you would like to detect 'a cat', the token_spans should be '[[[0, 1], [2, 5]], ]', since 'a cat and a dog'[0:1] is 'a', and 'a cat and a dog'[2:5] is 'cat'. \
+    ")
 
     parser.add_argument("--cpu-only", action="store_true", help="running on cpu only!, default=False")
     args = parser.parse_args()
@@ -189,17 +190,18 @@ if __name__ == "__main__":
     model = load_model(config_file, checkpoint_path, cpu_only=args.cpu_only)
 
     # visualize raw image
-    image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
+    # TODO disabled
+    # image_pil.save(os.path.join(output_dir, "raw_image.jpg"))
 
     # set the text_threshold to None if token_spans is set.
     if token_spans is not None:
         text_threshold = None
         print("Using token_spans. Set the text_threshold to None.")
 
-
     # run model
     boxes_filt, pred_phrases = get_grounding_output(
-        model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only, token_spans=eval(f"{token_spans}")
+        model, image, text_prompt, box_threshold, text_threshold, cpu_only=args.cpu_only,
+        token_spans=eval(f"{token_spans}")
     )
 
     # visualize pred
@@ -211,4 +213,6 @@ if __name__ == "__main__":
     }
     # import ipdb; ipdb.set_trace()
     image_with_box = plot_boxes_to_image(image_pil, pred_dict)[0]
-    image_with_box.save(os.path.join(output_dir, "pred.jpg"))
+
+    file_name = Path(args.image_path).stem
+    image_with_box.save(os.path.join(output_dir, f'{file_name}_{args.text_prompt}.jpg'))
