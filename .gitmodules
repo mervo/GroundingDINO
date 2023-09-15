@@ -1,3 +1,6 @@
 [submodule "video_utils"]
 	path = video_utils
 	url = git@github.com:mervo/video_utils.git
+[submodule "sahi_general"]
+	path = sahi_general
+	url = git@github.com:kimb3rlyn/sahi_general.git

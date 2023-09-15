@@ -14,6 +14,7 @@ from groundingdino.util.misc import clean_state_dict
 from groundingdino.util.slconfig import SLConfig
 from groundingdino.util.utils import get_phrases_from_posmap
 
+
 # ----------------------------------------------------------------------------------------------------------------------
 # OLD API
 # ----------------------------------------------------------------------------------------------------------------------
@@ -76,17 +77,19 @@ def predict(
 
     tokenizer = model.tokenizer
     tokenized = tokenizer(caption)
-    
+
     if remove_combined:
         sep_idx = [i for i in range(len(tokenized['input_ids'])) if tokenized['input_ids'][i] in [101, 102, 1012]]
-        
+
         phrases = []
         for logit in logits:
             max_idx = logit.argmax()
             insert_idx = bisect.bisect_left(sep_idx, max_idx)
             right_idx = sep_idx[insert_idx]
             left_idx = sep_idx[insert_idx - 1]
-            phrases.append(get_phrases_from_posmap(logit > text_threshold, tokenized, tokenizer, left_idx, right_idx).replace('.', ''))
+            phrases.append(
+                get_phrases_from_posmap(logit > text_threshold, tokenized, tokenizer, left_idx, right_idx).replace('.',
+                                                                                                                   ''))
     else:
         phrases = [
             get_phrases_from_posmap(logit > text_threshold, tokenized, tokenizer).replace('.', '')
@@ -123,10 +126,10 @@ def annotate(image_source: np.ndarray, boxes: torch.Tensor, logits: torch.Tensor
 class Model:
 
     def __init__(
-        self,
-        model_config_path: str,
-        model_checkpoint_path: str,
-        device: str = "cuda"
+            self,
+            model_config_path: str,
+            model_checkpoint_path: str,
+            device: str = "cuda"
     ):
         self.model = load_model(
             model_config_path=model_config_path,
@@ -136,11 +139,11 @@ class Model:
         self.device = device
 
     def predict_with_caption(
-        self,
-        image: np.ndarray,
-        caption: str,
-        box_threshold: float = 0.35,
-        text_threshold: float = 0.25
+            self,
+            image: np.ndarray,
+            caption: str,
+            box_threshold: float = 0.35,
+            text_threshold: float = 0.25
     ) -> Tuple[sv.Detections, List[str]]:
         """
         import cv2
@@ -166,7 +169,7 @@ class Model:
             image=processed_image,
             caption=caption,
             box_threshold=box_threshold,
-            text_threshold=text_threshold, 
+            text_threshold=text_threshold,
             device=self.device)
         source_h, source_w, _ = image.shape
         detections = Model.post_process_result(
@@ -176,12 +179,78 @@ class Model:
             logits=logits)
         return detections, phrases
 
+    # For https://github.com/kimb3rlyn/sahi_general/blob/main/script/sahi_general.py
+    def classname_to_idx(self):
+        """
+        use caption for single class for now since confidence seems to drop for multi-class
+        Returns:
+
+        """
+        return 0
+
+    def get_detections_dict(self, frames, classes=None, buffer_ratio=0.0):
+        '''
+        Parameters
+        ----------
+        frames : List[ndarray]
+            list of input images
+        classes : List[str], optional
+            classes to focus on -> single class which caption inside instead of usual CNNs
+        buffer_ratio : float, optional
+            proportion of buffer around the width and height of the bounding box
+
+        Returns
+        -------
+        List[dict]
+            list of detections for each frame with keys: label, confidence, t, l, b, r, w, h
+        '''
+
+        if frames is None or len(frames) == 0:
+            return None
+
+        # TODO implement way to pass in as config
+        box_threshold: float = 0.35
+        text_threshold: float = 0.25
+
+        all_detections = []
+
+        for frame in frames:
+            detections = []
+            processed_image = Model.preprocess_image(image_bgr=frame).to(self.device)
+            boxes, logits, phrases = predict(
+                model=self.model,
+                image=processed_image,
+                caption=classes[0],
+                box_threshold=box_threshold,
+                text_threshold=text_threshold,
+                device=self.device)
+            source_h, source_w, _ = frame.shape
+
+            # TODO error does not handle multiple detections
+
+            ltrb, confidence = Model.post_process_result_sahi(
+                source_h=source_h,
+                source_w=source_w,
+                boxes=boxes,
+                logits=logits)
+
+            l, t, r, b = ltrb
+            w = r - l
+            h = b - t
+            top, left, bot, right, width, height = t, l, b, r, w, h
+            all_detections.append(
+                {'label': classes[0], 'confidence': confidence, 't': top, 'l': left, 'b': bot, 'r': right, 'w': width,
+                 'h': height})
+
+        print(all_detections)
+        return all_detections
+
     def predict_with_classes(
-        self,
-        image: np.ndarray,
-        classes: List[str],
-        box_threshold: float,
-        text_threshold: float
+            self,
+            image: np.ndarray,
+            classes: List[str],
+            box_threshold: float,
+            text_threshold: float
     ) -> sv.Detections:
         """
         import cv2
@@ -242,9 +311,36 @@ class Model:
             logits: torch.Tensor
     ) -> sv.Detections:
         boxes = boxes * torch.Tensor([source_w, source_h, source_w, source_h])
+        print(boxes)
         xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
+        print(xyxy)
         confidence = logits.numpy()
+        print(confidence)
         return sv.Detections(xyxy=xyxy, confidence=confidence)
+
+    @staticmethod
+    def post_process_result_sahi(
+            source_h: int,
+            source_w: int,
+            boxes: torch.Tensor,
+            logits: torch.Tensor
+    ):
+        boxes = boxes * torch.Tensor([source_w, source_h, source_w, source_h])
+        print(boxes)
+        # tensor([[ 55.8210,   7.0361,  16.9120,  13.9681],
+        #         [176.7366,  72.5554,  10.9386,  10.9650]])
+        xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
+        print(xyxy)
+        # [[4.7364944e+01 5.1989079e-02 6.4276993e+01 1.4020136e+01]
+        #  [1.7126732e+02 6.7072853e+01 1.8220589e+02 7.8037895e+01]]
+        # TODO error if have multiple boxes
+        confidence = float(logits.numpy())
+        print(confidence)
+        # [0.49524018 0.35598293]
+        ltrb = tuple(map(tuple, xyxy))[0]
+        # (0.258667, 1.6383018, 472.89133, 104.335754)
+
+        return (ltrb, confidence)
 
     @staticmethod
     def phrases2classes(phrases: List[str], classes: List[str]) -> np.ndarray:

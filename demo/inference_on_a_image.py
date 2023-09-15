@@ -41,7 +41,7 @@ def plot_boxes_to_image(image_pil, tgt):
         x0, y0, x1, y1 = box
         x0, y0, x1, y1 = int(x0), int(y0), int(x1), int(y1)
 
-        draw.rectangle([x0, y0, x1, y1], outline=color, width=40)
+        draw.rectangle([x0, y0, x1, y1], outline=color, width=1)
         # draw.text((x0, y0), str(label), fill=color)
 
         font = ImageFont.load_default()
@@ -52,11 +52,11 @@ def plot_boxes_to_image(image_pil, tgt):
             bbox = (x0, y0, w + x0, y0 + h)
         # bbox = draw.textbbox((x0, y0), str(label))
         # TODO comment out to disable text
-        draw.rectangle(bbox, fill=color)
-        font = ImageFont.truetype("arial.ttf", 40)
-        draw.text((x0, y0), str(label), fill="white", font=font)
+        # draw.rectangle(bbox, fill=color)
+        # font = ImageFont.truetype("arial.ttf", 8)
+        # draw.text((x0, y0), str(label), fill="red", font=font)
 
-        mask_draw.rectangle([x0, y0, x1, y1], fill=255, width=40)
+        # mask_draw.rectangle([x0, y0, x1, y1], fill=255, width=1)
 
     return image_pil, mask
 
@@ -118,9 +118,9 @@ def get_grounding_output(model, image, caption, box_threshold, text_threshold=No
         for logit, box in zip(logits_filt, boxes_filt):
             pred_phrase = get_phrases_from_posmap(logit > text_threshold, tokenized, tokenlizer)
             if with_logits:
-                # pred_phrases.append('target' + f"({str(logit.max().item())[:4]})")
+                pred_phrases.append(f"({str(logit.max().item())[:4]})")
                 # TODO change to show actual phrase used in label display
-                pred_phrases.append(pred_phrase + f"({str(logit.max().item())[:4]})")
+                # pred_phrases.append(pred_phrase + f"({str(logit.max().item())[:4]})")
             else:
                 pred_phrases.append(pred_phrase)
     else:
