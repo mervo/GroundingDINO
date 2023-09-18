@@ -209,13 +209,12 @@ class Model:
             return None
 
         # TODO implement way to pass in as config
-        box_threshold: float = 0.35
+        box_threshold: float = 0.24
         text_threshold: float = 0.25
 
         all_detections = []
 
         for frame in frames:
-            detections = []
             processed_image = Model.preprocess_image(image_bgr=frame).to(self.device)
             boxes, logits, phrases = predict(
                 model=self.model,
@@ -228,19 +227,14 @@ class Model:
 
             # TODO error does not handle multiple detections
 
-            ltrb, confidence = Model.post_process_result_sahi(
+            cur_detections = Model.post_process_result_sahi(
                 source_h=source_h,
                 source_w=source_w,
                 boxes=boxes,
-                logits=logits)
+                logits=logits,
+                caption=classes[0])
 
-            l, t, r, b = ltrb
-            w = r - l
-            h = b - t
-            top, left, bot, right, width, height = t, l, b, r, w, h
-            all_detections.append(
-                {'label': classes[0], 'confidence': confidence, 't': top, 'l': left, 'b': bot, 'r': right, 'w': width,
-                 'h': height})
+            all_detections.append(cur_detections)
 
         print(all_detections)
         return all_detections
@@ -311,11 +305,8 @@ class Model:
             logits: torch.Tensor
     ) -> sv.Detections:
         boxes = boxes * torch.Tensor([source_w, source_h, source_w, source_h])
-        print(boxes)
         xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
-        print(xyxy)
         confidence = logits.numpy()
-        print(confidence)
         return sv.Detections(xyxy=xyxy, confidence=confidence)
 
     @staticmethod
@@ -323,24 +314,35 @@ class Model:
             source_h: int,
             source_w: int,
             boxes: torch.Tensor,
-            logits: torch.Tensor
+            logits: torch.Tensor,
+            caption: str
     ):
         boxes = boxes * torch.Tensor([source_w, source_h, source_w, source_h])
-        print(boxes)
         # tensor([[ 55.8210,   7.0361,  16.9120,  13.9681],
         #         [176.7366,  72.5554,  10.9386,  10.9650]])
         xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
-        print(xyxy)
         # [[4.7364944e+01 5.1989079e-02 6.4276993e+01 1.4020136e+01]
         #  [1.7126732e+02 6.7072853e+01 1.8220589e+02 7.8037895e+01]]
         # TODO error if have multiple boxes
-        confidence = float(logits.numpy())
-        print(confidence)
-        # [0.49524018 0.35598293]
-        ltrb = tuple(map(tuple, xyxy))[0]
-        # (0.258667, 1.6383018, 472.89133, 104.335754)
+        xyxy = xyxy.astype(int).tolist()
+        ltrbs = tuple(map(tuple, [xyxy][0]))
 
-        return (ltrb, confidence)
+        confidences = logits.numpy().astype(float)
+        # [0.49524018 0.35598293]
+        detections = []
+
+        for cur_index in range(len(xyxy)):
+            l, t, r, b = ltrbs[cur_index]
+            w = r - l
+            h = b - t
+            top, left, bot, right, width, height = t, l, b, r, w, h
+            detections.append(
+                {'label': caption, 'confidence': confidences[cur_index], 't': top, 'l': left, 'b': bot, 'r': right,
+                 'w': width,
+                 'h': height})
+
+        # (0.258667, 1.6383018, 472.89133, 104.335754)
+        return detections
 
     @staticmethod
     def phrases2classes(phrases: List[str], classes: List[str]) -> np.ndarray:
