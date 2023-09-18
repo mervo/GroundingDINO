@@ -129,7 +129,9 @@ class Model:
             self,
             model_config_path: str,
             model_checkpoint_path: str,
-            device: str = "cuda"
+            device: str = "cuda",
+            box_threshold: float = 0.35,
+            text_threshold: float = 0.25
     ):
         self.model = load_model(
             model_config_path=model_config_path,
@@ -137,6 +139,8 @@ class Model:
             device=device
         ).to(device)
         self.device = device
+        self.box_threshold = box_threshold
+        self.text_threshold = text_threshold
 
     def predict_with_caption(
             self,
@@ -180,7 +184,7 @@ class Model:
         return detections, phrases
 
     # For https://github.com/kimb3rlyn/sahi_general/blob/main/script/sahi_general.py
-    def classname_to_idx(self):
+    def classname_to_idx(self, category_name):
         """
         use caption for single class for now since confidence seems to drop for multi-class
         Returns:
@@ -208,9 +212,8 @@ class Model:
         if frames is None or len(frames) == 0:
             return None
 
-        # TODO implement way to pass in as config
-        box_threshold: float = 0.24
-        text_threshold: float = 0.25
+        box_threshold = self.box_threshold
+        text_threshold = self.text_threshold
 
         all_detections = []
 
@@ -225,8 +228,6 @@ class Model:
                 device=self.device)
             source_h, source_w, _ = frame.shape
 
-            # TODO error does not handle multiple detections
-
             cur_detections = Model.post_process_result_sahi(
                 source_h=source_h,
                 source_w=source_w,
@@ -236,7 +237,6 @@ class Model:
 
             all_detections.append(cur_detections)
 
-        print(all_detections)
         return all_detections
 
     def predict_with_classes(
@@ -318,12 +318,7 @@ class Model:
             caption: str
     ):
         boxes = boxes * torch.Tensor([source_w, source_h, source_w, source_h])
-        # tensor([[ 55.8210,   7.0361,  16.9120,  13.9681],
-        #         [176.7366,  72.5554,  10.9386,  10.9650]])
         xyxy = box_convert(boxes=boxes, in_fmt="cxcywh", out_fmt="xyxy").numpy()
-        # [[4.7364944e+01 5.1989079e-02 6.4276993e+01 1.4020136e+01]
-        #  [1.7126732e+02 6.7072853e+01 1.8220589e+02 7.8037895e+01]]
-        # TODO error if have multiple boxes
         xyxy = xyxy.astype(int).tolist()
         ltrbs = tuple(map(tuple, [xyxy][0]))
 
@@ -341,7 +336,6 @@ class Model:
                  'w': width,
                  'h': height})
 
-        # (0.258667, 1.6383018, 472.89133, 104.335754)
         return detections
 
     @staticmethod

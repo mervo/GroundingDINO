@@ -8,15 +8,18 @@ import torch
 from sahi_general.script.sahi_general import SahiGeneral
 from groundingdino.util.inference import Model
 
-imgpath = Path('/home/user/Downloads/runway_dmg_2.jpg')
-if not imgpath.is_file():
-    raise AssertionError(f'{str(imgpath)} not found')
+IMGPATH = Path('/data/datasets/PICTURE.jpg')
+CAPTION = ['caption text prompt here']
+BOX_THRESHOLD = 0.35
 
-output_folder = Path('../logs/1111')
-output_folder.mkdir(parents=True, exist_ok=True)
-
+OUTPUT_FOLDER = Path('../logs/1111')
 CONFIG_PATH = '../groundingdino/config/GroundingDINO_SwinB_cfg.py'
 WEIGHTS_PATH = '../weights/groundingdino_swinb_cogcoor.pth'
+
+if not IMGPATH.is_file():
+    raise AssertionError(f'{str(IMGPATH)} not found')
+
+OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 '''
     SAHI library needs to be installed
     Model needs to have classname_to_idx function and get_detections_dict function
@@ -26,7 +29,7 @@ WEIGHTS_PATH = '../weights/groundingdino_swinb_cogcoor.pth'
         list of detections for each frame with keys: label, confidence, t, l, b, r, w, h
 '''
 
-model = Model(model_config_path=CONFIG_PATH, model_checkpoint_path=WEIGHTS_PATH)
+model = Model(model_config_path=CONFIG_PATH, model_checkpoint_path=WEIGHTS_PATH, box_threshold=BOX_THRESHOLD)
 """
 Args:
     model :
@@ -80,11 +83,9 @@ sahi_general = SahiGeneral(model=model,
                            sahi_postprocess_class_agnostic=True,
                            full_frame_detection=True)
 
-img = cv2.imread(str(imgpath))
+img = cv2.imread(str(IMGPATH))
 bs = 1
 imgs = [img for _ in range(bs)]
-
-classes = ['hole']
 
 torch.cuda.synchronize()
 tic = perf_counter()
@@ -96,7 +97,7 @@ tic = perf_counter()
 #     text_threshold=0.25
 # )
 
-detections = sahi_general.detect(imgs, classes)
+detections = sahi_general.detect(imgs, CAPTION)
 
 torch.cuda.synchronize()
 dur = perf_counter() - tic
@@ -111,9 +112,11 @@ for det in detections[0]:
     r = det['r']
     b = det['b']
     classname = det['label']
-    cv2.rectangle(draw_frame, (l, t), (r, b), (255, 255, 0), 1)
-    cv2.putText(draw_frame, classname, (l, t - 8), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0))
+    confidence = det['confidence']
+    cv2.rectangle(draw_frame, (l, t), (r, b), (0, 0, 255), 2)
+    cv2.putText(draw_frame, f'{classname} ({confidence:.2f})', (l, t - 8), cv2.FONT_HERSHEY_SIMPLEX, fontScale=1,
+                thickness=3, color=(0, 0, 255))
 
-output_path = output_folder / 'test_out.jpg'
+output_path = OUTPUT_FOLDER / 'test_out.jpg'
 print(output_path)
 cv2.imwrite(str(output_path), draw_frame)
