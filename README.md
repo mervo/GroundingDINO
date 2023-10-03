@@ -1,6 +1,6 @@
 **Installation:**
 
-1.Clone repository and sub-modules from GitHub.
+1. Clone repository and sub-modules from GitHub.
 
 ```bash
 git clone --recurse-submodules -j4 https://github.com/IDEA-Research/GroundingDINO.git
