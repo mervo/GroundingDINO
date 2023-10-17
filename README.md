@@ -3,7 +3,7 @@
 1. Clone repository and sub-modules from GitHub.
 
 ```bash
-git clone --recurse-submodules -j4 https://github.com/IDEA-Research/GroundingDINO.git
+git clone --recurse-submodules -j4 https://github.com/mervo/GroundingDINO.git
 ```
 
 2. Change the current directory to the GroundingDINO folder.
