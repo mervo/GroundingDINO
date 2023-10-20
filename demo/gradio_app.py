@@ -93,8 +93,8 @@ if __name__ == "__main__":
 
     block = gr.Blocks().queue()
     with block:
-        gr.Markdown("# [Grounding DINO](https://github.com/IDEA-Research/GroundingDINO)")
-        gr.Markdown("### Open-World Detection with Grounding DINO")
+        gr.Markdown("# Open-Set Zero Shot Detection")
+        gr.Markdown("### Open-World Detection with Text Prompts")
 
         with gr.Row():
             with gr.Column():
