@@ -34,11 +34,12 @@ cd ..
 
 **Running Inference on Gradio App:**
 
-1. Run container with volume mount and port forwarding to localhost
+1. Run container with volume mount and port forwarded to localhost
 ```bash 
 docker run -it --rm -v ~/Desktop/GroundingDINO:/home/GroundingDINO -p 7579:7579 <IMAGE_NAME:TAG>  
 ```
 2. Spin up Gradio App, should use GPU if torch.cuda.is_available() is True
 ```bash
+cd GroundingDINO
 python3 demo/gradio_app.py 
 ```
