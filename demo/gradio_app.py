@@ -34,9 +34,9 @@ from huggingface_hub import hf_hub_download
 
 
 # Use this command for evaluate the Grounding DINO model
-config_file = "groundingdino/config/GroundingDINO_SwinB_cfg.py" # For faster inference, can use SwinT backbone config : GroundingDINO_SwinT_OGC.py
+config_file = "groundingdino/config/GroundingDINO_SwinT_OGC.py" # "GroundingDINO_SwinB_cfg.py" "GroundingDINO_SwinT_OGC.py"
 ckpt_repo_id = "ShilongLiu/GroundingDINO"
-ckpt_filenmae = "groundingdino_swinb_cogcoor.pth"  # For faster inference, can use SwinT backbone weights: groundingdino_swint_ogc.pth
+ckpt_filenmae = "groundingdino_swint_ogc.pth" #"groundingdino_swinb_cogcoor.pth"  "groundingdino_swint_ogc.pth"
 
 
 def load_model_hf(model_config_path, repo_id, filename, device='cpu'):
