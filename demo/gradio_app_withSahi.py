@@ -31,13 +31,15 @@ import groundingdino.datasets.transforms as T
 
 from huggingface_hub import hf_hub_download
 
+from sahi_general.script.sahi_general import SahiGeneral
+from groundingdino.util.inference import Model
+
 
 
 # Use this command for evaluate the Grounding DINO model
 config_file = "groundingdino/config/GroundingDINO_SwinB_cfg.py" # For faster inference, can use SwinT backbone config : GroundingDINO_SwinT_OGC.py
 ckpt_repo_id = "ShilongLiu/GroundingDINO"
-ckpt_filenmae = "groundingdino_swinb_cogcoor.pth"  # For faster inference, can use SwinT backbone weights: groundingdino_swint_ogc.pth
-
+ckpt_filenmae = "weights/groundingdino_swinb_cogcoor.pth"  # For faster inference, can use SwinT backbone weights: groundingdino_swint_ogc.pth
 
 def load_model_hf(model_config_path, repo_id, filename, device='cpu'):
     args = SLConfig.fromfile(model_config_path) 
@@ -67,20 +69,57 @@ def image_transform_grounding_for_vis(init_image):
     image, _ = transform(init_image, None) # 3, h, w
     return image
 
-model = load_model_hf(config_file, ckpt_repo_id, ckpt_filenmae)
+#model = load_model_hf(config_file, ckpt_repo_id, ckpt_filenmae)
 
-def run_grounding(input_image, grounding_caption, box_threshold, text_threshold):
+def run_grounding(input_image, grounding_caption, box_threshold, text_threshold,
+                sahi_image_threshold, sahi_slice_dim ):
+    model = Model(model_config_path=config_file, model_checkpoint_path=ckpt_filenmae, box_threshold=box_threshold)
+    sahi_general = SahiGeneral(model=model,
+                           sahi_image_height_threshold=sahi_image_threshold,
+                           sahi_image_width_threshold=sahi_image_threshold,
+                           sahi_slice_height=sahi_slice_dim,
+                           sahi_slice_width=sahi_slice_dim,
+                           sahi_overlap_height_ratio=0.2,
+                           sahi_overlap_width_ratio=0.2,
+                           sahi_postprocess_type="GREEDYNMM",
+                           sahi_postprocess_match_metric="IOS",
+                           sahi_postprocess_match_threshold=0.5,
+                           sahi_postprocess_class_agnostic=True,
+                           full_frame_detection=False)
+
     init_image = input_image.convert("RGB")
     original_size = init_image.size
 
-    _, image_tensor = image_transform_grounding(init_image)
-    image_pil: Image = image_transform_grounding_for_vis(init_image)
+    imgArray = np.array(init_image)
+    bs = 1
+    imgs = [imgArray for _ in range(bs)]
+
+    detections = sahi_general.detect(imgs, grounding_caption)
+
+
+    #_, image_tensor = image_transform_grounding(init_image)
+    #image_pil: Image = image_transform_grounding_for_vis(init_image)
 
     # run grounidng
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    boxes, logits, phrases = predict(model, image_tensor, grounding_caption, box_threshold, text_threshold, device=device)
-    annotated_frame = annotate(image_source=np.asarray(image_pil), boxes=boxes, logits=logits, phrases=phrases)
-    image_with_box = Image.fromarray(cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB))
+    #model = model.to(device)
+
+    draw_frame = imgArray.copy()
+
+    for det in detections[0]:
+        l = det['l']
+        t = det['t']
+        r = det['r']
+        b = det['b']
+        classname = det['label']
+        confidence = det['confidence']
+        cv2.rectangle(draw_frame, (l, t), (r, b), (0, 0, 255), 2)
+        cv2.putText(draw_frame, f'{grounding_caption} ({confidence:.2f})', (l, t - 8), cv2.FONT_HERSHEY_SIMPLEX, fontScale=1,
+                    thickness=3, color=(0, 0, 255))
+
+    #boxes, logits, phrases = predict(model, image_tensor, grounding_caption, box_threshold, text_threshold, device=device)
+    #annotated_frame = annotate(image_source=np.asarray(image_pil), boxes=boxes, logits=logits, phrases=phrases)
+    image_with_box = Image.fromarray(draw_frame)
 
 
     return image_with_box
@@ -109,6 +148,12 @@ if __name__ == "__main__":
                     text_threshold = gr.Slider(
                         label="Text Threshold", minimum=0.0, maximum=1.0, value=0.25, step=0.001
                     )
+                    sahi_image_threshold = gr.Slider(
+                        label="SAHI Image Threshold", minimum=0, maximum=400, value=200, step=10
+                    )
+                    sahi_slice_dim = gr.Slider(
+                        label="SAHI Slice Dimensions", minimum=0, maximum=600, value=300, step=10
+                    )
 
             with gr.Column():
                 gallery = gr.outputs.Image(
@@ -119,7 +164,8 @@ if __name__ == "__main__":
                 #         grid=[1], height="auto", container=True, full_width=True, full_height=True)
 
         run_button.click(fn=run_grounding, inputs=[
-                        input_image, grounding_caption, box_threshold, text_threshold], outputs=[gallery])
+                        input_image, grounding_caption, box_threshold, text_threshold,
+                        sahi_image_threshold, sahi_slice_dim ], outputs=[gallery])
 
 
     block.launch(server_name='0.0.0.0', server_port=7579, debug=args.debug, share=args.share)
