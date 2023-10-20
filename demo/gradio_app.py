@@ -77,7 +77,8 @@ def run_grounding(input_image, grounding_caption, box_threshold, text_threshold)
     image_pil: Image = image_transform_grounding_for_vis(init_image)
 
     # run grounidng
-    boxes, logits, phrases = predict(model, image_tensor, grounding_caption, box_threshold, text_threshold, device='cpu')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    boxes, logits, phrases = predict(model, image_tensor, grounding_caption, box_threshold, text_threshold, device=device)
     annotated_frame = annotate(image_source=np.asarray(image_pil), boxes=boxes, logits=logits, phrases=phrases)
     image_with_box = Image.fromarray(cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB))
 
