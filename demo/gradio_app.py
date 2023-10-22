@@ -94,11 +94,12 @@ if __name__ == "__main__":
 
     block = gr.Blocks().queue()
     with block:
-        gr.Markdown("# Open-Set Zero Shot Detection")
-        gr.Markdown("### Open-World Detection with Text Prompts")
+        gr.Markdown('''<h1 style="text-align: center; margin-bottom: 0px;">Open-Set Zero Shot Detection</h1>
+                    <p style="text-align: center; margin-top: 0px;">Open-World Detection with Text Prompts</p>
+                    ''')
 
         with gr.Row():
-            with gr.Column():
+            with gr.Column(variant='compact'):
                 input_image = gr.Image(source='upload', type="pil")
                 grounding_caption = gr.Textbox(label="Detection Prompt")
                 run_button = gr.Button(label="Run")
@@ -110,7 +111,7 @@ if __name__ == "__main__":
                         label="Text Threshold", minimum=0.0, maximum=1.0, value=0.25, step=0.001
                     )
 
-            with gr.Column():
+            with gr.Column(variant='compact'):
                 gallery = gr.outputs.Image(
                     type="pil",
                     # label="grounding results"
