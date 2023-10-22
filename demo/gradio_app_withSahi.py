@@ -32,12 +32,17 @@ from groundingdino.util.inference import Model
 # Use this command for evaluate the Grounding DINO model
 config_file = "groundingdino/config/GroundingDINO_SwinB_cfg.py" # For faster inference, can use SwinT backbone config : GroundingDINO_SwinT_OGC.py
 ckpt_repo_id = "ShilongLiu/GroundingDINO"
-ckpt_filenmae = "weights/groundingdino_swinb_cogcoor.pth"  # For faster inference, can use SwinT backbone weights: groundingdino_swint_ogc.pth
+ckpt_filename = "weights/groundingdino_swinb_cogcoor.pth"  # For faster inference, can use SwinT backbone weights: groundingdino_swint_ogc.pth
   
+model = Model(model_config_path=config_file, model_checkpoint_path=ckpt_filename)
 
 def run_grounding(input_image, grounding_caption, box_threshold, text_threshold,
                 sahi_image_threshold, sahi_slice_dim ):
-    model = Model(model_config_path=config_file, model_checkpoint_path=ckpt_filenmae, box_threshold=box_threshold)
+    
+    # re-assign thresholds
+    model.box_threshold = box_threshold
+    model.text_threshold = text_threshold
+    
     sahi_general = SahiGeneral(model=model,
                            sahi_image_height_threshold=sahi_image_threshold,
                            sahi_image_width_threshold=sahi_image_threshold,
