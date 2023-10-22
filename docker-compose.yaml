@@ -1,0 +1,23 @@
+version: "3.4"
+
+services:
+  main:
+    stdin_open: true
+    tty: true
+    image: opensetdetector:v0.0.2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./:/workspace
+    ports:
+      - 7579:7579
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    shm_size: 16gb
+    command: python3 demo/gradio_app.py
