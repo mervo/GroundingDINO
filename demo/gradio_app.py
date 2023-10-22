@@ -14,9 +14,9 @@ import warnings
 import torch
 
 # prepare the environment
-os.system("python setup.py build develop --user")
-os.system("pip install packaging==21.3")
-os.system("pip install gradio")
+# os.system("python setup.py build develop --user")
+# os.system("pip install packaging==21.3")
+# os.system("pip install gradio")
 
 
 warnings.filterwarnings("ignore")
